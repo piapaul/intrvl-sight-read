@@ -6,11 +6,9 @@
 -->
 
 <!-- 
-  STEP 1: Load Libraries
-  - VexFlow has been REMOVED as requested.
-  - pitchy: To detect the pitch from the microphone.
+  NO EXTERNAL LIBRARIES ARE USED.
+  The pitch detection algorithm is now built-in below.
 -->
-<script src="https://cdn.jsdelivr.net/npm/pitchy@4.0.5/dist/pitchy.min.js"></script>
 
 <!-- 
   WRAPPER DIV 
@@ -116,7 +114,6 @@
     #intrvl-quiz-wrapper #feedback.incorrect { color: #D9A074; }
 
     /* --- New Quiz Screen Styles --- */
-    /* This is now an <img> tag, replacing the VexFlow <div> */
     #intrvl-quiz-wrapper #question-image {
       width: 100%;
       max-width: 280px;
@@ -203,7 +200,6 @@
     <div id="quiz-screen" class="screen hidden">
       <h3 id="quiz-title" class="mb-2"></h3>
       
-      <!-- VexFlow canvas has been REPLACED with an <img> tag -->
       <img id="question-image" src="" alt="Note on stave" />
       
       <div id="tuner-display">
@@ -235,7 +231,6 @@
   <script>
     // --- Constants ---
     const DATA_URL = "https://raw.githubusercontent.com/piapaul/music-theory-images/main/standard-notes.json";
-    // ADDED: Base URL for your images
     const IMAGE_BASE_URL = "https://piapaul.github.io/music-theory-images/single";
     
     // Note filters (same as before)
@@ -261,12 +256,98 @@
     let highScores = {};
     let currentQuestion = {}; // { 'note-name': 'C4', clef: 'treble', ... }
     let isListening = false;
-    let audioContext, analyser, pitchFinder;
+    let audioContext, analyser, mediaStreamSource;
+    let audioBuffer = null;
+    let rafID = null; // requestAnimationFrame ID
     
-    // VexFlow objects REMOVED
-
     // --- DOM Elements Cache ---
     let DOM = {};
+
+    // --- NEW PITCH DETECTION ALGORITHM (Replaces Pitchy) ---
+    // This code is now part of the main script, so it cannot fail to load.
+
+    const noteStrings = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    
+    /**
+     * Converts a frequency in Hz to a MIDI note number.
+     * @param {number} frequency - Frequency in Hz.
+     * @returns {number} MIDI note number.
+     */
+    function noteFromPitch(frequency) {
+      const noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
+      return Math.round(noteNum) + 69;
+    }
+
+    /**
+     * Performs autocorrelation on an audio buffer to find the fundamental frequency.
+     * @param {Float32Array} buf - The audio buffer (time-domain data).
+     * @param {number} sampleRate - The sample rate of the AudioContext.
+     * @returns {number} The detected frequency in Hz, or -1 if no clear pitch is found.
+     */
+    function autoCorrelate(buf, sampleRate) {
+      // YIN algorithm implementation
+      const SIZE = buf.length;
+      let rms = 0;
+
+      for (let i = 0; i < SIZE; i++) {
+        const val = buf[i];
+        rms += val * val;
+      }
+      rms = Math.sqrt(rms / SIZE);
+      if (rms < 0.01) { // Not enough signal
+        return -1;
+      }
+
+      let r1 = 0, r2 = SIZE - 1;
+      const thres = 0.2;
+      for (let i = 0; i < SIZE / 2; i++) {
+        if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+      }
+      for (let i = 1; i < SIZE / 2; i++) {
+        if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+      }
+
+      const buf2 = buf.slice(r1, r2);
+      const SIZE2 = buf2.length;
+      
+      const c = new Array(SIZE2).fill(0);
+      for (let i = 0; i < SIZE2; i++) {
+        for (let j = 0; j < SIZE2 - i; j++) {
+          c[i] = c[i] + buf2[j] * buf2[j + i];
+        }
+      }
+
+      let d = 0;
+      while (c[d] > c[d + 1]) {
+        d++;
+      }
+      
+      let maxval = -1, maxpos = -1;
+      for (let i = d; i < SIZE2; i++) {
+        if (c[i] > maxval) {
+          maxval = c[i];
+          maxpos = i;
+        }
+      }
+      
+      let T0 = maxpos;
+      
+      // Parabolic interpolation for greater accuracy
+      const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+      const a = (x1 + x3 - 2 * x2) / 2;
+      const b = (x3 - x1) / 2;
+      if (a) {
+        T0 = T0 - b / (2 * a);
+      }
+
+      if (T0 === 0) return -1;
+      
+      return sampleRate / T0;
+    }
+    
+    // --- END of new pitch detection code ---
+
+
     
     function cacheDOMElements() {
       DOM.wrapper = document.getElementById("intrvl-quiz-wrapper");
@@ -280,7 +361,6 @@
       DOM.micError = document.getElementById("mic-error");
 
       DOM.quizTitle = document.getElementById("quiz-title");
-      // REPLACED: staveContainer with questionImage
       DOM.questionImage = document.getElementById("question-image");
       DOM.tunerStatus = document.getElementById("tuner-status");
       DOM.heardNote = document.getElementById("heard-note");
@@ -299,32 +379,31 @@
 
     // --- Screen Navigation ---
     function showScreen(screen) {
-      if (!DOM.menu) return; // Guard against running before DOM is cached
-      [DOM.menu, DOM.permission, DOM.quiz, DOM.end].forEach(s => s.classList.add('hidden'));
+      if (!DOM.menu) return; 
+      [DOM.menu, DOM.permission, DOM.quiz, DOM.end].forEach(s => {
+        if(s) s.classList.add('hidden');
+      });
       setTimeout(() => {
-        screen.classList.remove('hidden');
+        if(screen) screen.classList.remove('hidden');
       }, 10);
     }
-
-    // REMOVED: parseNote helper function (no longer needed)
 
     // --- Game Logic ---
     
     /**
-     * Checks if pitchy is loaded, then starts the app.
-     * VexFlow check has been REMOVED.
+     * This function now just starts the app.
+     * No library check is needed.
      */
-    function checkLibrariesAndInit() {
-      cacheDOMElements(); 
-      
-      // SIMPLIFIED: Only check for pitchy
-      if (typeof pitchy !== 'undefined') {
-        console.log("Pitchy library loaded, initializing app.");
-        // Now run the original init logic
+    function onDomReady() {
+      try {
+        cacheDOMElements(); 
+        console.log("DOM cached. Initializing app.");
         runInit();
-      } else {
-        console.log("Waiting for pitchy library to load...");
-        setTimeout(checkLibrariesAndInit, 100); // Check again in 100ms
+      } catch (e) {
+         console.error("Error during initialization:", e);
+         if (DOM.wrapper) {
+            DOM.wrapper.innerHTML = "<p style='color: red; text-align: center;'>A critical error occurred. Please refresh.</p>";
+         }
       }
     }
 
@@ -337,16 +416,12 @@
         loadHighScores();
         setupMenu();
         addEventListeners();
-        // REMOVED: setupVexFlow()
         showScreen(DOM.menu);
       } catch (error) {
         console.error("Failed to initialize quiz:", error);
         DOM.wrapper.innerHTML = "<p style='color: red; text-align: center;'>Failed to load quiz data. Please refresh the page.</p>";
       }
     }
-    
-    // REMOVED: setupVexFlow() function
-    // REMOVED: drawNote() function
     
     /**
      * Binds all button clicks.
@@ -383,11 +458,11 @@
         
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
+        analyser.fftSize = 2048; // Standard size
+        audioBuffer = new Float32Array(analyser.fftSize); // Re-use this buffer
         
-        // Initialize pitchy
-        pitchFinder = pitchy.PitchFinder.forFloat32Array(analyser.fftSize);
+        mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        mediaStreamSource.connect(analyser);
         
         // Start the quiz
         prepStart(currentType);
@@ -425,7 +500,7 @@
       DOM.menu.querySelectorAll('.btn').forEach(b => {
         const type = b.dataset.type;
         const score = highScores[type] || 0;
-        const p = b.nextElementSibling; // This will now find the <p> tag
+        const p = b.nextElementSibling; 
         if (p) {
           p.innerHTML = `High Score<br>${score}`;
         }
@@ -433,13 +508,21 @@
     }
     
     /**
-     * Resets state and returns to the main menu.
+     * Stops the audio and returns to the main menu.
      */
     function goHome() {
       isListening = false;
-      if (audioContext) {
-        audioContext.close(); // Stop the audio context
+      if (rafID) {
+        cancelAnimationFrame(rafID);
+        rafID = null;
       }
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close(); 
+      }
+      if (mediaStreamSource) {
+        mediaStreamSource.disconnect();
+      }
+      
       setupMenu();
       showScreen(DOM.menu);
     }
@@ -459,6 +542,10 @@
       DOM.feedback.textContent = "";
       DOM.feedback.className = "";
       
+      // Reset button states on permission screen
+      DOM.startMicBtn.disabled = false;
+      DOM.startMicBtn.textContent = "Start Listening";
+      
       showScreen(DOM.quiz);
       nextQ();
       
@@ -473,21 +560,30 @@
     function updatePitch() {
       if (!isListening) return; // Stop the loop if quiz is over
 
-      const inputData = new Float32Array(analyser.fftSize);
-      analyser.getFloatTimeDomainData(inputData);
+      // Ensure audioContext is still running
+      if (!audioContext || audioContext.state === 'closed') {
+        console.warn("AudioContext closed, stopping listener.");
+        isListening = false;
+        return;
+      }
+
+      analyser.getFloatTimeDomainData(audioBuffer);
       
-      // Get pitch (in Hz) and clarity from pitchy
-      const [pitch, clarity] = pitchFinder(inputData, audioContext.sampleRate);
+      // Use the new autoCorrelate function
+      const pitch = autoCorrelate(audioBuffer, audioContext.sampleRate);
       
-      if (clarity > 0.95) { // Only accept clear notes
-        const midi = pitchy.utilities.hzToMidi(pitch);
-        const noteName = pitchy.utilities.midiToNoteName(midi);
+      if (pitch !== -1) { 
+        // Convert frequency (pitch) to a note name
+        const noteNum = noteFromPitch(pitch);
+        const noteName = noteStrings[noteNum % 12];
+        const octave = Math.floor(noteNum / 12) - 1;
+        const detectedNote = noteName + octave; // This gives "C4", "G#5" etc.
         
-        DOM.tunerStatus.textContent = `Clarity: ${(clarity * 100).toFixed(0)}%`;
-        DOM.heardNote.textContent = `Heard: ${noteName}`;
+        DOM.tunerStatus.textContent = `Detected: ${pitch.toFixed(1)} Hz`;
+        DOM.heardNote.textContent = `Heard: ${detectedNote}`;
         
         // Check for win
-        if (noteName.startsWith(currentQuestion['note-name'])) {
+        if (detectedNote === currentQuestion['note-name']) {
           handleCorrectAnswer();
         }
       } else {
@@ -496,7 +592,7 @@
       }
       
       // Continue the loop
-      requestAnimationFrame(updatePitch);
+      rafID = requestAnimationFrame(updatePitch);
     }
     
     /**
@@ -506,16 +602,21 @@
       DOM.feedback.textContent = "";
       DOM.feedback.className = "";
       
-      // Find an unused question
       let available = quizData.filter(q => !usedQuestions.has(q.fileurl));
       if (available.length === 0) {
-        return endGame();
+        if (usedQuestions.size > 0) {
+            console.log("All questions used, resetting...");
+            usedQuestions.clear();
+            available = quizData;
+        } else {
+            console.error("No questions available for this clef type.");
+            return endGame();
+        }
       }
       
       currentQuestion = available[Math.floor(Math.random() * available.length)];
       usedQuestions.add(currentQuestion.fileurl);
       
-      // UPDATED: Set the image source instead of drawing with VexFlow
       const filename = currentQuestion.fileurl.split('/').pop();
       const clef = currentQuestion.clef;
       DOM.questionImage.src = `${IMAGE_BASE_URL}/${clef}/${filename}`;
@@ -529,6 +630,9 @@
       if (!isListening) return; // Prevent double-scoring
       
       isListening = false; // Pause listening
+      cancelAnimationFrame(rafID); // Stop the loop
+      rafID = null;
+
       score++;
       DOM.scoreDisplay.textContent = `Score: ${score}`;
       DOM.feedback.textContent = 'Correct!';
@@ -538,6 +642,7 @@
       setTimeout(() => {
         isListening = true; // Resume listening
         nextQ();
+        updatePitch(); // Restart the loop
       }, 1500);
     }
 
@@ -546,8 +651,15 @@
      */
     function endGame() {
       isListening = false;
-      if (audioContext) {
+      if (rafID) {
+        cancelAnimationFrame(rafID);
+        rafID = null;
+      }
+      if (audioContext && audioContext.state !== 'closed') {
         audioContext.close(); // Stop the mic
+      }
+      if (mediaStreamSource) {
+        mediaStreamSource.disconnect();
       }
       
       DOM.endTitle.textContent = `Quiz Complete: ${typeNames[currentType]}`;
@@ -566,7 +678,7 @@
 
     // --- Start ---
     // Use DOMContentLoaded to start the app
-    document.addEventListener('DOMContentLoaded', checkLibrariesAndInit);
+    document.addEventListener('DOMContentLoaded', onDomReady);
 
   </script>
 </div>
