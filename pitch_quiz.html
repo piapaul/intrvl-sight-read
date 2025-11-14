@@ -2,7 +2,7 @@
   This file must be hosted on a secure (https://) server to access the microphone.
   It will NOT work in a SquareSpace "Code Block".
   It WILL work if hosted on a service like GitHub Pages and added
-  to SquareSpace using an "Embed" block. 
+  to SquareSpace using an "Embed" block.
 -->
 
 <!-- 
@@ -229,8 +229,9 @@
 
   <script>
     // --- Constants ---
-    // This JSON file contains all the note definitions
-    const DATA_URL = "https://piapaul.github.io/music-theory-images/standard-notes.json";
+    
+    // *** FIX 1: Changed DATA_URL to the 'raw' version which does not require GitHub Pages ***
+    const DATA_URL = "https://raw.githubusercontent.com/piapaul/music-theory-images/main/standard-notes.json";
     
     // Note filters (same as before)
     const typeFilters = {
@@ -262,36 +263,41 @@
     let vexRenderer, vexContext, stave;
 
     // --- DOM Elements Cache ---
-    const DOM = {
-      wrapper: document.getElementById("intrvl-quiz-wrapper"),
-      menu: document.getElementById("menu-screen"),
-      permission: document.getElementById("permission-screen"),
-      quiz: document.getElementById("quiz-screen"),
-      end: document.getElementById("end-screen"),
+    
+    // *** FIX 2: Declare DOM object, but populate it *after* DOM content is loaded ***
+    let DOM = {};
+    
+    function cacheDOMElements() {
+      DOM.wrapper = document.getElementById("intrvl-quiz-wrapper");
+      DOM.menu = document.getElementById("menu-screen");
+      DOM.permission = document.getElementById("permission-screen");
+      DOM.quiz = document.getElementById("quiz-screen");
+      DOM.end = document.getElementById("end-screen");
       
-      startMicBtn: document.getElementById("start-mic-btn"),
-      permissionCancelBtn: document.getElementById("permission-cancel-btn"),
-      micError: document.getElementById("mic-error"),
+      DOM.startMicBtn = document.getElementById("start-mic-btn");
+      DOM.permissionCancelBtn = document.getElementById("permission-cancel-btn");
+      DOM.micError = document.getElementById("mic-error");
 
-      quizTitle: document.getElementById("quiz-title"),
-      staveContainer: document.getElementById("stave-container"),
-      tunerStatus: document.getElementById("tuner-status"),
-      heardNote: document.getElementById("heard-note"),
-      feedback: document.getElementById("feedback"),
-      scoreDisplay: document.getElementById("score-display"),
-      gameHigh: document.getElementById("game-high"),
+      DOM.quizTitle = document.getElementById("quiz-title");
+      DOM.staveContainer = document.getElementById("stave-container");
+      DOM.tunerStatus = document.getElementById("tuner-status");
+      DOM.heardNote = document.getElementById("heard-note");
+      DOM.feedback = document.getElementById("feedback");
+      DOM.scoreDisplay = document.getElementById("score-display");
+      DOM.gameHigh = document.getElementById("game-high");
       
-      endTitle: document.getElementById("end-title"),
-      finalScore: document.getElementById("final-score"),
-      endHigh: document.getElementById("end-high"),
+      DOM.endTitle = document.getElementById("end-title");
+      DOM.finalScore = document.getElementById("final-score");
+      DOM.endHigh = document.getElementById("end-high");
       
-      retryBtn: document.getElementById("retry-button"),
-      restartBtn: document.getElementById("restart-button"),
-      goBackQuizBtn: document.getElementById("goback-button-quiz"),
-    };
+      DOM.retryBtn = document.getElementById("retry-button");
+      DOM.restartBtn = document.getElementById("restart-button");
+      DOM.goBackQuizBtn = document.getElementById("goback-button-quiz");
+    }
 
     // --- Screen Navigation ---
     function showScreen(screen) {
+      if (!DOM.menu) return; // Guard against running before DOM is cached
       [DOM.menu, DOM.permission, DOM.quiz, DOM.end].forEach(s => s.classList.add('hidden'));
       setTimeout(() => {
         screen.classList.remove('hidden');
@@ -304,6 +310,9 @@
      * Checks if VexFlow and pitchy are loaded, then starts the app.
      */
     function checkLibrariesAndInit() {
+      // *** FIX 2 (continued): Populate the DOM object *first* ***
+      cacheDOMElements(); 
+      
       if (typeof Vex !== 'undefined' && Vex.Flow && typeof pitchy !== 'undefined') {
         console.log("Libraries loaded, initializing app.");
         // Now that Vex.Flow exists, assign the classes
@@ -335,6 +344,7 @@
         showScreen(DOM.menu);
       } catch (error) {
         console.error("Failed to initialize quiz:", error);
+        // This will now work, because DOM.wrapper is populated
         DOM.wrapper.innerHTML = "<p style='color: red; text-align: center;'>Failed to load quiz data. Please refresh the page.</p>";
       }
     }
@@ -499,7 +509,8 @@
     function updatePitch() {
       if (!isListening) return; // Stop the loop if quiz is over
 
-      const inputData = new Float3ZArray(analyser.fftSize);
+      // *** FIX 3: Corrected typo Float3ZArray -> Float32Array ***
+      const inputData = new Float32Array(analyser.fftSize);
       analyser.getFloatTimeDomainData(inputData);
       
       // Get pitch (in Hz) and clarity from pitchy
