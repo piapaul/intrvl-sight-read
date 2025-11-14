@@ -1,0 +1,600 @@
+<!-- 
+  This file must be hosted on a secure (https://) server to access the microphone.
+  It will NOT work in a SquareSpace "Code Block".
+  It WILL work if hosted on a service like GitHub Pages and added
+  to SquareSpace using an "Embed" block.
+-->
+
+<!-- 
+  STEP 1: Load Libraries
+  - VexFlow: To draw the musical notes.
+  - pitchy: To detect the pitch from the microphone.
+-->
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.0/build/vexflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pitchy@4.0.5/dist/pitchy.min.js"></script>
+
+<!-- 
+  WRAPPER DIV 
+  All quiz content now lives inside this wrapper.
+-->
+<div id="intrvl-quiz-wrapper" style="width: 100%; margin: 0 auto; max-width: 500px; text-align: center;">
+  
+  <!-- 
+    SCOPED STYLES
+    All styles are self-contained and scoped to this wrapper.
+    No font sizes are defined, so they will be inherited from your site.
+  -->
+  <style>
+    /* --- Base & Font Inheritance --- */
+    #intrvl-quiz-wrapper {
+      font-family: inherit;
+      color: inherit;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    #intrvl-quiz-wrapper *,
+    #intrvl-quiz-wrapper *::before,
+    #intrvl-quiz-wrapper *::after {
+      box-sizing: border-box;
+      font: inherit;
+      color: inherit;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* --- Layout --- */
+    #intrvl-quiz-wrapper .screen {
+      background-color: #FAFAFA; /* light */
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      transition: opacity 0.3s ease-in-out, visibility 0.3s;
+      min-height: 400px;
+    }
+    #intrvl-quiz-wrapper .screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      display: none;
+    }
+    #intrvl-quiz-wrapper .grid-cols-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    #intrvl-quiz-wrapper .grid-cols-1 {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    #intrvl-quiz-wrapper .flex-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* --- Spacing --- */
+    #intrvl-quiz-wrapper .mb-2 { margin-bottom: 8px; }
+    #intrvl-quiz-wrapper .mb-4 { margin-bottom: 16px; }
+    #intrvl-quiz-wrapper .mb-6 { margin-bottom: 24px; }
+    #intrvl-quiz-wrapper .mt-1 { margin-top: 4px; }
+    #intrvl-quiz-wrapper .mt-4 { margin-top: 16px; }
+    #intrvl-quiz-wrapper .mt-8 { margin-top: 32px; }
+    #intrvl-quiz-wrapper .my-4 { margin-top: 16px; margin-bottom: 16px; }
+    #intrvl-quiz-wrapper .my-8 { margin-top: 32px; margin-bottom: 32px; }
+    
+    /* --- Elements --- */
+    #intrvl-quiz-wrapper h3 { color: #1C1C1C; }
+    #intrvl-quiz-wrapper h4 { color: #D9A5B3; }
+    #intrvl-quiz-wrapper .text-gray-500 { color: #6B7280; }
+    #intrvl-quiz-wrapper .text-primary { color: #D9A5B3; }
+    
+    #intrvl-quiz-wrapper .btn {
+      width: 100%;
+      background-color: #D9A5B3; /* primary */
+      color: #1C1C1C; /* dark */
+      padding: 12px 24px;
+      margin: 4px 0;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    #intrvl-quiz-wrapper .btn:hover { background-color: #C18F9D; }
+    #intrvl-quiz-wrapper .btn:active { transform: scale(0.98); }
+    #intrvl-quiz-wrapper .btn:disabled { background-color: #cccccc; cursor: not-allowed; }
+    #intrvl-quiz-wrapper .btn.secondary { background-color: #B7A7C9; }
+    #intrvl-quiz-wrapper .btn.secondary:hover { background-color: #9B8198; }
+    #intrvl-quiz-wrapper .btn.accent { background-color: #C1A45F; }
+    #intrvl-quiz-wrapper .btn.accent:hover { background-color: #A58441; }
+
+    #intrvl-quiz-wrapper #feedback {
+      min-height: 1.5em;
+      margin: 16px 0;
+    }
+    #intrvl-quiz-wrapper #feedback.correct { color: #A9B9A2; }
+    #intrvl-quiz-wrapper #feedback.incorrect { color: #D9A074; }
+
+    /* --- New Quiz Screen Styles --- */
+    #intrvl-quiz-wrapper #stave-container {
+      width: 100%;
+      max-width: 280px;
+      margin: 20px auto;
+      height: 150px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #intrvl-quiz-wrapper #tuner-display {
+      margin-top: 20px;
+      padding: 16px;
+      background-color: #fff;
+      border-radius: 8px;
+    }
+    #intrvl-quiz-wrapper #tuner-status {
+      min-height: 1.5em;
+    }
+    #intrvl-quiz-wrapper #heard-note {
+      min-height: 1.5em;
+      color: #D9A5B3; /* primary */
+    }
+    #intrvl-quiz-wrapper .text-red { color: #D9A074; }
+
+  </style>
+
+  <!-- 
+    HTML Screens
+    - Menu: Select Clef
+    - Permission: Ask for microphone
+    - Quiz: Show note, listen for pitch
+    - End: Show score
+  -->
+  <div class="w-full-and-max-w-md-replacement">
+
+    <!-- Menu Screen -->
+    <div id="menu-screen" class="screen">
+      <h3 class="mb-6">Select Quiz</h3>
+      <div class="grid-cols-2 mb-4">
+        <div class="menu-item">
+          <button class="btn" data-type="treble">Treble Clef</button>
+        </div>
+        <div class="menu-item">
+          <button class="btn" data-type="bass">Bass Clef</button>
+        </div>
+        <div class="menu-item">
+          <button class="btn" data-type="tenor">Tenor Clef</button>
+        </div>
+        <div class="menu-item">
+          <button class="btn" data-type="alto">Alto Clef</button>
+        </div>
+      </div>
+      <div class="grid-cols-1 mb-4">
+        <div class="menu-item">
+          <button class="btn" data-type="treblebass">Treble &amp; Bass</button>
+        </div>
+        <div class="menu-item">
+          <button class="btn" data-type="all">All Clefs</button>
+        </div>
+      </div>
+       <p class="text-gray-500 mt-4">High scores are saved per-clef</p>
+    </div>
+
+    <!-- Permission Screen -->
+    <div id="permission-screen" class="screen hidden">
+      <h3 class="mb-4">Microphone Access</h3>
+      <p class="text-gray-500 mb-6">This quiz needs to use your microphone to hear the notes you play.</p>
+      <div class="flex-col">
+        <button id="start-mic-btn" class="btn accent">Start Listening</button>
+        <button id="permission-cancel-btn" class="btn secondary">Cancel</button>
+      </div>
+      <p id="mic-error" class="text-red mt-4"></p>
+    </div>
+
+    <!-- Quiz Screen -->
+    <div id="quiz-screen" class="screen hidden">
+      <h3 id="quiz-title" class="mb-2"></h3>
+      
+      <!-- VexFlow canvas will be built here -->
+      <div id="stave-container"></div>
+      
+      <div id="tuner-display">
+        <p id="tuner-status">Listening...</p>
+        <h4 id="heard-note" class="text-primary">Heard: ---</h4>
+      </div>
+
+      <p id="feedback" class="my-4"></p>
+      
+      <p id="score-display" class="my-4">Score: 0</p>
+      
+      <button id="goback-button-quiz" class="btn secondary mt-8">Go Back</button>
+      <p id="game-high" class="text-gray-500 mt-4">High Score: 0</p>
+    </div>
+
+    <!-- End Screen -->
+    <div id="end-screen" class="screen hidden">
+      <h3 id="end-title" class="mb-4">Quiz Complete!</h3>
+      <p id="final-score" class="mb-4"></p>
+      <p id="end-high" class="text-gray-500 mb-6">High Score: 0</p>
+      <div class="flex-col">
+        <button class="btn" id="retry-button">Try Again</button>
+        <button class="btn secondary" id="restart-button">Select Another Quiz</button>
+      </div>
+    </div>
+
+  </div> <!-- End of wrapper -->
+
+  <script>
+    // --- Constants ---
+    // This JSON file contains all the note definitions
+    const DATA_URL = "https://piapaul.github.io/music-theory-images/standard-notes.json";
+    
+    // Note filters (same as before)
+    const typeFilters = {
+      treble: ["treble"],
+      bass: ["bass"],
+      treblebass: ["treble", "bass"],
+      tenor: ["tenor"],
+      alto: ["alto"],
+      all: ["treble", "bass", "tenor", "alto", "treble8vb"],
+    };
+    const typeNames = {
+      treble: "Treble Clef",
+      bass: "Bass Clef",
+      treblebass: "Treble & Bass",
+      tenor: "Tenor Clef",
+      alto: "Alto Clef",
+      all: "All Clefs",
+    };
+
+    // --- State Variables ---
+    let allNotesData, quizData, currentType, score, usedQuestions;
+    let highScores = {};
+    let currentQuestion = {}; // { 'note-name': 'C4', clef: 'treble', ... }
+    let isListening = false;
+    let audioContext, analyser, pitchFinder;
+    
+    // VexFlow objects - DECLARED here, ASSIGNED in checkLibrariesAndInit
+    let Renderer, Stave, StaveNote, Formatter, Voice, Accidental;
+    let vexRenderer, vexContext, stave;
+
+    // --- DOM Elements Cache ---
+    const DOM = {
+      wrapper: document.getElementById("intrvl-quiz-wrapper"),
+      menu: document.getElementById("menu-screen"),
+      permission: document.getElementById("permission-screen"),
+      quiz: document.getElementById("quiz-screen"),
+      end: document.getElementById("end-screen"),
+      
+      startMicBtn: document.getElementById("start-mic-btn"),
+      permissionCancelBtn: document.getElementById("permission-cancel-btn"),
+      micError: document.getElementById("mic-error"),
+
+      quizTitle: document.getElementById("quiz-title"),
+      staveContainer: document.getElementById("stave-container"),
+      tunerStatus: document.getElementById("tuner-status"),
+      heardNote: document.getElementById("heard-note"),
+      feedback: document.getElementById("feedback"),
+      scoreDisplay: document.getElementById("score-display"),
+      gameHigh: document.getElementById("game-high"),
+      
+      endTitle: document.getElementById("end-title"),
+      finalScore: document.getElementById("final-score"),
+      endHigh: document.getElementById("end-high"),
+      
+      retryBtn: document.getElementById("retry-button"),
+      restartBtn: document.getElementById("restart-button"),
+      goBackQuizBtn: document.getElementById("goback-button-quiz"),
+    };
+
+    // --- Screen Navigation ---
+    function showScreen(screen) {
+      [DOM.menu, DOM.permission, DOM.quiz, DOM.end].forEach(s => s.classList.add('hidden'));
+      setTimeout(() => {
+        screen.classList.remove('hidden');
+      }, 10);
+    }
+
+    // --- Game Logic ---
+    
+    /**
+     * Checks if VexFlow and pitchy are loaded, then starts the app.
+     */
+    function checkLibrariesAndInit() {
+      if (typeof Vex !== 'undefined' && Vex.Flow && typeof pitchy !== 'undefined') {
+        console.log("Libraries loaded, initializing app.");
+        // Now that Vex.Flow exists, assign the classes
+        Renderer = Vex.Flow.Renderer;
+        Stave = Vex.Flow.Stave;
+        StaveNote = Vex.Flow.StaveNote;
+        Formatter = Vex.Flow.Formatter;
+        Voice = Vex.Flow.Voice;
+        Accidental = Vex.Flow.Accidental;
+        
+        // Now run the original init logic
+        runInit();
+      } else {
+        console.log("Waiting for libraries to load...");
+        setTimeout(checkLibrariesAndInit, 100); // Check again in 100ms
+      }
+    }
+
+    /**
+     * Main initialization. Loads data, sets up menu.
+     */
+    async function runInit() {
+      try {
+        allNotesData = await fetch(DATA_URL).then(r => r.json());
+        loadHighScores();
+        setupMenu();
+        addEventListeners();
+        setupVexFlow();
+        showScreen(DOM.menu);
+      } catch (error) {
+        console.error("Failed to initialize quiz:", error);
+        DOM.wrapper.innerHTML = "<p style='color: red; text-align: center;'>Failed to load quiz data. Please refresh the page.</p>";
+      }
+    }
+    
+    /**
+     * Sets up VexFlow renderer once.
+     */
+    function setupVexFlow() {
+      DOM.staveContainer.innerHTML = '';
+      vexRenderer = new Renderer(DOM.staveContainer, Renderer.Backends.SVG);
+      vexRenderer.resize(280, 150);
+      vexContext = vexRenderer.getContext();
+    }
+
+    /**
+     * Draws the current question note on the stave.
+     */
+    function drawNote(clef, noteName, accidental) {
+      vexContext.clear();
+      stave = new Stave(10, 20, 260);
+      stave.addClef(clef);
+      stave.setContext(vexContext).draw();
+
+      let staveNote = new StaveNote({
+        clef: clef,
+        keys: [noteName],
+        duration: "q" // Quarter note
+      });
+      
+      if (accidental && accidental !== "n") {
+         staveNote.addAccidental(0, new Accidental(accidental)); // Use assigned variable
+      }
+
+      const voice = new Voice({ num_beats: 1, beat_value: 4 });
+      voice.addTickables([staveNote]);
+      new Formatter().joinVoices([voice]).format([voice], 200);
+      voice.draw(vexContext, stave);
+    }
+    
+    /**
+     * Binds all button clicks.
+     */
+    function addEventListeners() {
+      // Menu screen
+      DOM.menu.querySelectorAll('.btn').forEach(b => {
+        b.onclick = () => {
+          currentType = b.dataset.type;
+          showScreen(DOM.permission);
+        };
+      });
+      
+      // Permission screen
+      DOM.startMicBtn.onclick = startListening;
+      DOM.permissionCancelBtn.onclick = goHome;
+      
+      // Quiz/End screens
+      DOM.goBackQuizBtn.onclick = goHome;
+      DOM.retryBtn.onclick = () => prepStart(currentType);
+      DOM.restartBtn.onclick = goHome;
+    }
+    
+    /**
+     * Tries to get microphone access and start the tuner.
+     */
+    async function startListening() {
+      DOM.startMicBtn.disabled = true;
+      DOM.startMicBtn.textContent = "Starting...";
+      DOM.micError.textContent = "";
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        
+        // Initialize pitchy
+        pitchFinder = pitchy.PitchFinder.forFloat32Array(analyser.fftSize);
+        
+        // Start the quiz
+        prepStart(currentType);
+
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+        DOM.micError.textContent = "Microphone access was denied. Please check your browser settings.";
+        DOM.startMicBtn.disabled = false;
+        DOM.startMicBtn.textContent = "Start Listening";
+      }
+    }
+
+    /**
+     * Loads high scores from localStorage.
+     */
+    function loadHighScores() {
+      try {
+        const stored = localStorage.getItem('intrvl-pitch-highscores');
+        highScores = stored ? JSON.parse(stored) : {};
+      } catch (e) { highScores = {}; }
+    }
+    
+    /**
+     * Saves high scores.
+     */
+    function saveHighScores() {
+      localStorage.setItem('intrvl-pitch-highscores', JSON.stringify(highScores));
+    }
+    
+    /**
+     * Updates high score text on the menu.
+     */
+    function setupMenu() {
+      loadHighScores();
+      DOM.menu.querySelectorAll('.btn').forEach(b => {
+        const type = b.dataset.type;
+        const score = highScores[type] || 0;
+        const p = b.nextElementSibling; // Relies on <p> being right after <button>
+        if (p) {
+          p.innerHTML = `High Score<br>${score}`;
+        }
+      });
+    }
+    
+    /**
+     * Resets state and returns to the main menu.
+     */
+    function goHome() {
+      isListening = false;
+      if (audioContext) {
+        audioContext.close(); // Stop the audio context
+      }
+      setupMenu();
+      showScreen(DOM.menu);
+    }
+
+    /**
+     * Sets up the quiz screen.
+     */
+    function prepStart(type) {
+      score = 0;
+      currentType = type;
+      usedQuestions = new Set();
+      quizData = allNotesData.filter(d => typeFilters[type].includes(d.clef));
+      
+      DOM.quizTitle.textContent = typeNames[type] + " Quiz";
+      DOM.scoreDisplay.textContent = `Score: 0`;
+      DOM.gameHigh.textContent = `High Score: ${highScores[type] || 0}`;
+      DOM.feedback.textContent = "";
+      DOM.feedback.className = "";
+      
+      showScreen(DOM.quiz);
+      nextQ();
+      
+      // Start the pitch detection loop
+      isListening = true;
+      updatePitch();
+    }
+    
+    /**
+     * The main "tuner" loop. Runs continuously.
+     */
+    function updatePitch() {
+      if (!isListening) return; // Stop the loop if quiz is over
+
+      const inputData = new Float3ZArray(analyser.fftSize);
+      analyser.getFloatTimeDomainData(inputData);
+      
+      // Get pitch (in Hz) and clarity from pitchy
+      // We set sampleRate from the audioContext
+      const [pitch, clarity] = pitchFinder(inputData, audioContext.sampleRate);
+      
+      if (clarity > 0.95) { // Only accept clear notes
+        // Convert Hz to MIDI number, then to a note name
+        const midi = pitchy.utilities.hzToMidi(pitch);
+        const noteName = pitchy.utilities.midiToNoteName(midi);
+        
+        DOM.tunerStatus.textContent = `Clarity: ${(clarity * 100).toFixed(0)}%`;
+        DOM.heardNote.textContent = `Heard: ${noteName}`;
+        
+        // Check for win
+        // We use .startsWith to match 'C4' with 'C4' (noteName might have cents)
+        if (noteName.startsWith(currentQuestion['note-name'])) {
+          handleCorrectAnswer();
+        }
+      } else {
+        DOM.tunerStatus.textContent = "Listening...";
+        DOM.heardNote.textContent = "Heard: ---";
+      }
+      
+      // Continue the loop
+      requestAnimationFrame(updatePitch);
+    }
+    
+    /**
+     * Gets the next question, or ends the game.
+     */
+    function nextQ() {
+      DOM.feedback.textContent = "";
+      DOM.feedback.className = "";
+      
+      // Find an unused question
+      let available = quizData.filter(q => !usedQuestions.has(q.fileurl));
+      if (available.length === 0) {
+        // No more questions, end game
+        return endGame();
+      }
+      
+      currentQuestion = available[Math.floor(Math.random() * available.length)];
+      usedQuestions.add(currentQuestion.fileurl);
+      
+      // Draw the note
+      const noteParts = Vex.Flow.parseNote(currentQuestion['note-name']);
+      drawNote(currentQuestion.clef, `${noteParts.key}/${noteParts.octave}`, noteParts.accidental);
+    }
+
+    /**
+     * Handles a correct answer.
+     */
+    function handleCorrectAnswer() {
+      if (!isListening) return; // Prevent double-scoring
+      
+      isListening = false; // Pause listening
+      score++;
+      DOM.scoreDisplay.textContent = `Score: ${score}`;
+      DOM.feedback.textContent = 'Correct!';
+      DOM.feedback.className = 'correct';
+      
+      // Show next question after a delay
+      setTimeout(() => {
+        isListening = true; // Resume listening
+        nextQ();
+      }, 1500);
+    }
+
+    /**
+     * Ends the game and shows the end screen.
+     */
+    function endGame() {
+      isListening = false;
+      if (audioContext) {
+        audioContext.close(); // Stop the mic
+      }
+      
+      DOM.endTitle.textContent = `Quiz Complete: ${typeNames[currentType]}`;
+      DOM.finalScore.textContent = `Final Score: ${score}`;
+      
+      let oldHigh = highScores[currentType] || 0;
+      if (score > oldHigh) {
+        highScores[currentType] = score;
+        saveHighScores();
+        DOM.finalScore.textContent += ` – 🎉 New High Score! 🎉`;
+      }
+      DOM.endHigh.textContent = `High Score: ${highScores[currentType]}`;
+      
+      showScreen(DOM.end);
+    }
+
+    // --- Start ---
+    // Use DOMContentLoaded to start the app
+    document.addEventListener('DOMContentLoaded', checkLibrariesAndInit);
+
+  </script>
+</div>
