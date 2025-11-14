@@ -7,10 +7,9 @@
 
 <!-- 
   STEP 1: Load Libraries
-  - VexFlow: To draw the musical notes.
+  - VexFlow has been REMOVED as requested.
   - pitchy: To detect the pitch from the microphone.
 -->
-<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.0/build/vexflow.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pitchy@4.0.5/dist/pitchy.min.js"></script>
 
 <!-- 
@@ -117,7 +116,8 @@
     #intrvl-quiz-wrapper #feedback.incorrect { color: #D9A074; }
 
     /* --- New Quiz Screen Styles --- */
-    #intrvl-quiz-wrapper #stave-container {
+    /* This is now an <img> tag, replacing the VexFlow <div> */
+    #intrvl-quiz-wrapper #question-image {
       width: 100%;
       max-width: 280px;
       margin: 20px auto;
@@ -125,9 +125,8 @@
       background-color: #fff;
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: block;
+      object-fit: contain;
     }
     #intrvl-quiz-wrapper #tuner-display {
       margin-top: 20px;
@@ -161,23 +160,29 @@
       <div class="grid-cols-2 mb-4">
         <div class="menu-item">
           <button class="btn" data-type="treble">Treble Clef</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
         <div class="menu-item">
           <button class="btn" data-type="bass">Bass Clef</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
         <div class="menu-item">
           <button class="btn" data-type="tenor">Tenor Clef</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
         <div class="menu-item">
           <button class="btn" data-type="alto">Alto Clef</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
       </div>
       <div class="grid-cols-1 mb-4">
         <div class="menu-item">
           <button class="btn" data-type="treblebass">Treble &amp; Bass</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
         <div class="menu-item">
           <button class="btn" data-type="all">All Clefs</button>
+          <p class="text-gray-500 mt-1">High Score<br>0</p>
         </div>
       </div>
        <p class="text-gray-500 mt-4">High scores are saved per-clef</p>
@@ -198,8 +203,8 @@
     <div id="quiz-screen" class="screen hidden">
       <h3 id="quiz-title" class="mb-2"></h3>
       
-      <!-- VexFlow canvas will be built here -->
-      <div id="stave-container"></div>
+      <!-- VexFlow canvas has been REPLACED with an <img> tag -->
+      <img id="question-image" src="" alt="Note on stave" />
       
       <div id="tuner-display">
         <p id="tuner-status">Listening...</p>
@@ -229,9 +234,9 @@
 
   <script>
     // --- Constants ---
-    
-    // *** FIX 1: Changed DATA_URL to the 'raw' version which does not require GitHub Pages ***
     const DATA_URL = "https://raw.githubusercontent.com/piapaul/music-theory-images/main/standard-notes.json";
+    // ADDED: Base URL for your images
+    const IMAGE_BASE_URL = "https://piapaul.github.io/music-theory-images/single";
     
     // Note filters (same as before)
     const typeFilters = {
@@ -258,13 +263,9 @@
     let isListening = false;
     let audioContext, analyser, pitchFinder;
     
-    // VexFlow objects - DECLARED here, ASSIGNED in checkLibrariesAndInit
-    let Renderer, Stave, StaveNote, Formatter, Voice, Accidental;
-    let vexRenderer, vexContext, stave;
+    // VexFlow objects REMOVED
 
     // --- DOM Elements Cache ---
-    
-    // *** FIX 2: Declare DOM object, but populate it *after* DOM content is loaded ***
     let DOM = {};
     
     function cacheDOMElements() {
@@ -279,7 +280,8 @@
       DOM.micError = document.getElementById("mic-error");
 
       DOM.quizTitle = document.getElementById("quiz-title");
-      DOM.staveContainer = document.getElementById("stave-container");
+      // REPLACED: staveContainer with questionImage
+      DOM.questionImage = document.getElementById("question-image");
       DOM.tunerStatus = document.getElementById("tuner-status");
       DOM.heardNote = document.getElementById("heard-note");
       DOM.feedback = document.getElementById("feedback");
@@ -304,29 +306,24 @@
       }, 10);
     }
 
+    // REMOVED: parseNote helper function (no longer needed)
+
     // --- Game Logic ---
     
     /**
-     * Checks if VexFlow and pitchy are loaded, then starts the app.
+     * Checks if pitchy is loaded, then starts the app.
+     * VexFlow check has been REMOVED.
      */
     function checkLibrariesAndInit() {
-      // *** FIX 2 (continued): Populate the DOM object *first* ***
       cacheDOMElements(); 
       
-      if (typeof Vex !== 'undefined' && Vex.Flow && typeof pitchy !== 'undefined') {
-        console.log("Libraries loaded, initializing app.");
-        // Now that Vex.Flow exists, assign the classes
-        Renderer = Vex.Flow.Renderer;
-        Stave = Vex.Flow.Stave;
-        StaveNote = Vex.Flow.StaveNote;
-        Formatter = Vex.Flow.Formatter;
-        Voice = Vex.Flow.Voice;
-        Accidental = Vex.Flow.Accidental;
-        
+      // SIMPLIFIED: Only check for pitchy
+      if (typeof pitchy !== 'undefined') {
+        console.log("Pitchy library loaded, initializing app.");
         // Now run the original init logic
         runInit();
       } else {
-        console.log("Waiting for libraries to load...");
+        console.log("Waiting for pitchy library to load...");
         setTimeout(checkLibrariesAndInit, 100); // Check again in 100ms
       }
     }
@@ -340,49 +337,16 @@
         loadHighScores();
         setupMenu();
         addEventListeners();
-        setupVexFlow();
+        // REMOVED: setupVexFlow()
         showScreen(DOM.menu);
       } catch (error) {
         console.error("Failed to initialize quiz:", error);
-        // This will now work, because DOM.wrapper is populated
         DOM.wrapper.innerHTML = "<p style='color: red; text-align: center;'>Failed to load quiz data. Please refresh the page.</p>";
       }
     }
     
-    /**
-     * Sets up VexFlow renderer once.
-     */
-    function setupVexFlow() {
-      DOM.staveContainer.innerHTML = '';
-      vexRenderer = new Renderer(DOM.staveContainer, Renderer.Backends.SVG);
-      vexRenderer.resize(280, 150);
-      vexContext = vexRenderer.getContext();
-    }
-
-    /**
-     * Draws the current question note on the stave.
-     */
-    function drawNote(clef, noteName, accidental) {
-      vexContext.clear();
-      stave = new Stave(10, 20, 260);
-      stave.addClef(clef);
-      stave.setContext(vexContext).draw();
-
-      let staveNote = new StaveNote({
-        clef: clef,
-        keys: [noteName],
-        duration: "q" // Quarter note
-      });
-      
-      if (accidental && accidental !== "n") {
-         staveNote.addAccidental(0, new Accidental(accidental)); // Use assigned variable
-      }
-
-      const voice = new Voice({ num_beats: 1, beat_value: 4 });
-      voice.addTickables([staveNote]);
-      new Formatter().joinVoices([voice]).format([voice], 200);
-      voice.draw(vexContext, stave);
-    }
+    // REMOVED: setupVexFlow() function
+    // REMOVED: drawNote() function
     
     /**
      * Binds all button clicks.
@@ -461,7 +425,7 @@
       DOM.menu.querySelectorAll('.btn').forEach(b => {
         const type = b.dataset.type;
         const score = highScores[type] || 0;
-        const p = b.nextElementSibling; // Relies on <p> being right after <button>
+        const p = b.nextElementSibling; // This will now find the <p> tag
         if (p) {
           p.innerHTML = `High Score<br>${score}`;
         }
@@ -509,16 +473,13 @@
     function updatePitch() {
       if (!isListening) return; // Stop the loop if quiz is over
 
-      // *** FIX 3: Corrected typo Float3ZArray -> Float32Array ***
       const inputData = new Float32Array(analyser.fftSize);
       analyser.getFloatTimeDomainData(inputData);
       
       // Get pitch (in Hz) and clarity from pitchy
-      // We set sampleRate from the audioContext
       const [pitch, clarity] = pitchFinder(inputData, audioContext.sampleRate);
       
       if (clarity > 0.95) { // Only accept clear notes
-        // Convert Hz to MIDI number, then to a note name
         const midi = pitchy.utilities.hzToMidi(pitch);
         const noteName = pitchy.utilities.midiToNoteName(midi);
         
@@ -526,7 +487,6 @@
         DOM.heardNote.textContent = `Heard: ${noteName}`;
         
         // Check for win
-        // We use .startsWith to match 'C4' with 'C4' (noteName might have cents)
         if (noteName.startsWith(currentQuestion['note-name'])) {
           handleCorrectAnswer();
         }
@@ -549,16 +509,17 @@
       // Find an unused question
       let available = quizData.filter(q => !usedQuestions.has(q.fileurl));
       if (available.length === 0) {
-        // No more questions, end game
         return endGame();
       }
       
       currentQuestion = available[Math.floor(Math.random() * available.length)];
       usedQuestions.add(currentQuestion.fileurl);
       
-      // Draw the note
-      const noteParts = Vex.Flow.parseNote(currentQuestion['note-name']);
-      drawNote(currentQuestion.clef, `${noteParts.key}/${noteParts.octave}`, noteParts.accidental);
+      // UPDATED: Set the image source instead of drawing with VexFlow
+      const filename = currentQuestion.fileurl.split('/').pop();
+      const clef = currentQuestion.clef;
+      DOM.questionImage.src = `${IMAGE_BASE_URL}/${clef}/${filename}`;
+      DOM.questionImage.alt = `Note on a ${clef} clef stave`;
     }
 
     /**
